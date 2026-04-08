@@ -1,8 +1,12 @@
+import json
+
 import requests
 from requests import RequestException
 
-from config import ENV_SERVER_URL, MODEL_NAME
+from config import API_KEY, ENV_SERVER_URL, MODEL_NAME
 from my_env.env import JobReadinessEnv
+from openai_client import get_openai_client
+
 TASKS = ["easy", "medium", "hard"]
 LOCAL_ENV = JobReadinessEnv()
 USE_LOCAL_ENV = False
@@ -62,39 +66,95 @@ def post(path, payload):
         return local_post(path, payload)
 
 
+def default_plan(state):
+    user_input = state["user_input"]
+    return {
+        "goal": f"Create a structured AI job-readiness plan for: {user_input}",
+        "plan": [
+            "Learn Python fundamentals and AI basics",
+            "Practice SQL, data handling, and beginner machine learning concepts",
+            "Build 2 practical projects and publish them on GitHub",
+            "Prepare a resume, portfolio, and interview practice routine",
+        ],
+        "tools": ["Python", "ChatGPT", "Hugging Face", "GitHub"],
+        "timeline": "4-month beginner-friendly roadmap with weekly goals and project milestones",
+    }
+
+
+def build_messages(state):
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are helping solve a job-readiness planning environment. "
+                "Return only valid JSON with keys: goal, plan, tools, timeline. "
+                "goal must be a short string. plan must be a list of 4 concise steps. "
+                "tools must be a list of 3 to 5 items. timeline must be a short string. "
+                "Include practical beginner-friendly guidance and keywords like Python, projects, portfolio, "
+                "SQL, machine learning, AI tools, timeline, or resume when relevant."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Difficulty: {state['difficulty']}\n"
+                f"User input: {state['user_input']}\n"
+                f"Feedback: {state['feedback']}\n"
+                "Produce the planning JSON now."
+            ),
+        },
+    ]
+
+
+def generate_plan_with_llm(state):
+    if not API_KEY:
+        raise RuntimeError("API_KEY is not set.")
+
+    client = get_openai_client()
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        response_format={"type": "json_object"},
+        messages=build_messages(state),
+        temperature=0.2,
+    )
+    content = response.choices[0].message.content or "{}"
+    plan = json.loads(content)
+
+    return {
+        "goal": str(plan.get("goal", "")).strip(),
+        "plan": [str(item).strip() for item in plan.get("plan", []) if str(item).strip()],
+        "tools": [str(item).strip() for item in plan.get("tools", []) if str(item).strip()],
+        "timeline": str(plan.get("timeline", "")).strip(),
+    }
+
+
+def build_actions(state):
+    try:
+        plan_data = generate_plan_with_llm(state)
+        log_mode("proxy")
+    except Exception as exc:
+        print(
+            f"[WARN] LLM planning failed. Falling back to deterministic planner. error={exc}",
+            flush=True,
+        )
+        plan_data = default_plan(state)
+        log_mode("deterministic")
+
+    return [
+        {"action_type": "identify_goal", "content": plan_data["goal"]},
+        {"action_type": "generate_plan", "content": plan_data["plan"]},
+        {"action_type": "suggest_tools", "content": plan_data["tools"]},
+        {"action_type": "set_timeline", "content": plan_data["timeline"]},
+        {"action_type": "finalize", "content": "done"},
+    ]
+
+
 def run_task(task_name):
     log_start(task_name)
     rewards = []
 
     state = post("/reset", {"task_name": task_name})
-
-    steps = [
-        {
-            "action_type": "identify_goal",
-            "content": "Learn AI tools and skills for job readiness"
-        },
-        {
-            "action_type": "generate_plan",
-            "content": [
-                "Learn Python and AI basics",
-                "Practice SQL, data handling, and beginner machine learning concepts",
-                "Build 2 small projects using AI tools",
-                "Create resume and portfolio"
-            ]
-        },
-        {
-            "action_type": "suggest_tools",
-            "content": ["Python", "ChatGPT", "Hugging Face", "GitHub"]
-        },
-        {
-            "action_type": "set_timeline",
-            "content": "4-month beginner-friendly roadmap with weekly goals"
-        },
-        {
-            "action_type": "finalize",
-            "content": "done"
-        },
-    ]
+    steps = build_actions(state)
 
     success = False
     step_num = 0
