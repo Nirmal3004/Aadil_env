@@ -82,14 +82,9 @@ def step(
     )
 ):
     if request.method == "GET":
-        if env.state is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Environment not initialized. Call /reset first.",
-            )
         return {
             "message": "Use POST /step with a JSON body containing action_type and content.",
-            "state": env.state_dict(),
+            "state": None if env.state is None else env.state_dict(),
         }
 
     if req is None:
