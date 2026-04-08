@@ -25,4 +25,6 @@ def grade_state(state, task):
     if state.done:
         score += 0.1
 
-    return round(min(score, 1.0), 2)
+    # Validation requires scores to be strictly inside (0, 1).
+    bounded = max(min(score, 0.99), 0.01)
+    return round(bounded, 2)
