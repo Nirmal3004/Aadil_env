@@ -1,3 +1,6 @@
+from my_env.score_utils import normalize_task_score
+
+
 def grade_state(state, task):
     score = 0.0
 
@@ -25,6 +28,4 @@ def grade_state(state, task):
     if state.done:
         score += 0.1
 
-    # Validation requires scores to be strictly inside (0, 1).
-    bounded = max(min(score, 0.99), 0.01)
-    return round(bounded, 2)
+    return normalize_task_score(score)

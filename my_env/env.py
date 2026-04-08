@@ -2,6 +2,7 @@ import copy
 from my_env.models import PlannerState, StepResult
 from my_env.tasks import TASKS
 from my_env.graders import grade_state
+from my_env.score_utils import normalize_task_score
 from openai_client import ping_llm_proxy
 
 
@@ -73,7 +74,7 @@ class JobReadinessEnv:
         except Exception as e:
             error = str(e)
 
-        reward = grade_state(self.state, self.current_task)
+        reward = normalize_task_score(grade_state(self.state, self.current_task))
 
         if self.state.step_count >= self.state.max_steps:
             self.state.done = True

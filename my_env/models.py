@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
+
+from my_env.score_utils import normalize_task_score
 
 
 class PlannerState(BaseModel):
@@ -26,3 +28,8 @@ class StepResult(BaseModel):
     reward: float
     done: bool
     error: Optional[str] = None
+
+    @field_validator("reward", mode="before")
+    @classmethod
+    def normalize_reward(cls, value):
+        return normalize_task_score(value)
