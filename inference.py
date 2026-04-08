@@ -1,7 +1,11 @@
 import requests
+from requests import RequestException
 
 from config import ENV_SERVER_URL, MODEL_NAME
+from my_env.env import JobReadinessEnv
 TASKS = ["easy", "medium", "hard"]
+LOCAL_ENV = JobReadinessEnv()
+USE_LOCAL_ENV = False
 
 
 def log_start(task):
@@ -23,9 +27,39 @@ def log_end(success, steps, rewards):
     )
 
 
+def log_mode(mode):
+    print(f"[MODE] backend={mode}", flush=True)
+
+
+def local_post(path, payload):
+    if path == "/reset":
+        return LOCAL_ENV.reset(payload.get("task_name", "easy")).model_dump()
+    if path == "/step":
+        return LOCAL_ENV.step(payload).model_dump()
+    if path == "/state":
+        return LOCAL_ENV.state_dict()
+    raise ValueError(f"Unsupported path: {path}")
+
+
 def post(path, payload):
     url = f"{ENV_SERVER_URL}{path}"
-    return requests.post(url, json=payload, timeout=30).json()
+    global USE_LOCAL_ENV
+
+    if USE_LOCAL_ENV:
+        return local_post(path, payload)
+
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except (RequestException, ValueError) as exc:
+        USE_LOCAL_ENV = True
+        print(
+            f"[WARN] API server unavailable at {ENV_SERVER_URL}. Falling back to local environment. error={exc}",
+            flush=True,
+        )
+        log_mode("local")
+        return local_post(path, payload)
 
 
 def run_task(task_name):
