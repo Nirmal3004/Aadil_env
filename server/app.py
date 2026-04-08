@@ -7,6 +7,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from my_env.env import JobReadinessEnv
+from openai_client import ping_llm_proxy
 
 app = FastAPI(title="Job Readiness Task Planner Environment", version="0.2.0")
 env = JobReadinessEnv()
@@ -28,6 +29,10 @@ def root():
 
 @app.get("/reset")
 def reset_get():
+    try:
+        ping_llm_proxy()
+    except Exception:
+        pass
     state = env.reset("easy")
     return state.model_dump()
 
@@ -43,6 +48,10 @@ def reset_post(
         },
     )
 ):
+    try:
+        ping_llm_proxy()
+    except Exception:
+        pass
     task_name = "easy" if req is None else req.task_name
     state = env.reset(task_name)
     return state.model_dump()
