@@ -3,13 +3,12 @@ from typing import Any
 from fastapi import Body
 from fastapi import FastAPI
 from fastapi import HTTPException
-from fastapi import Request
 from pydantic import BaseModel
 import uvicorn
 
 from my_env.env import JobReadinessEnv
 
-app = FastAPI(title="Job Readiness Task Planner Environment")
+app = FastAPI(title="Job Readiness Task Planner Environment", version="0.2.0")
 env = JobReadinessEnv()
 
 
@@ -27,8 +26,14 @@ def root():
     return {"message": "Job Readiness OpenEnv is running"}
 
 
-@app.api_route("/reset", methods=["GET", "POST"])
-def reset(
+@app.get("/reset")
+def reset_get():
+    state = env.reset("easy")
+    return state.model_dump()
+
+
+@app.post("/reset")
+def reset_post(
     req: ResetRequest | None = Body(
         default=None,
         examples={
@@ -53,9 +58,16 @@ def get_state():
     return env.state_dict()
 
 
-@app.api_route("/step", methods=["GET", "POST"])
-def step(
-    request: Request,
+@app.get("/step")
+def step_get():
+    return {
+        "message": "Use POST /step with a JSON body containing action_type and content.",
+        "state": None if env.state is None else env.state_dict(),
+    }
+
+
+@app.post("/step")
+def step_post(
     req: dict[str, Any] | None = Body(
         default=None,
         examples={
@@ -81,12 +93,6 @@ def step(
         },
     )
 ):
-    if request.method == "GET":
-        return {
-            "message": "Use POST /step with a JSON body containing action_type and content.",
-            "state": None if env.state is None else env.state_dict(),
-        }
-
     if req is None:
         raise HTTPException(
             status_code=400,
