@@ -2,16 +2,22 @@ import copy
 from my_env.models import PlannerState, StepResult
 from my_env.tasks import TASKS
 from my_env.graders import grade_state
+from openai_client import ping_llm_proxy
 
 
 class JobReadinessEnv:
     def __init__(self):
         self.current_task = None
         self.state = None
+        self.proxy_checked = False
 
     def reset(self, task_name: str = "easy"):
         if task_name not in TASKS:
             raise ValueError(f"Unknown task: {task_name}")
+
+        if not self.proxy_checked:
+            ping_llm_proxy()
+            self.proxy_checked = True
 
         task = TASKS[task_name]
         self.current_task = copy.deepcopy(task)

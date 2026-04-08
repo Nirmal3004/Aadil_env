@@ -23,6 +23,6 @@ def ping_llm_proxy() -> None:
                 "content": "Reply with OK.",
             }
         ],
-        max_tokens=1,
+        max_tokens=5,
         temperature=0,
     )
