@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import Body
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi import Request
 from pydantic import BaseModel
 import uvicorn
 
@@ -26,7 +27,7 @@ def root():
     return {"message": "Job Readiness OpenEnv is running"}
 
 
-@app.post("/reset")
+@app.api_route("/reset", methods=["GET", "POST"])
 def reset(
     req: ResetRequest | None = Body(
         default=None,
@@ -52,8 +53,9 @@ def get_state():
     return env.state_dict()
 
 
-@app.post("/step")
+@app.api_route("/step", methods=["GET", "POST"])
 def step(
+    request: Request,
     req: dict[str, Any] | None = Body(
         default=None,
         examples={
@@ -79,6 +81,17 @@ def step(
         },
     )
 ):
+    if request.method == "GET":
+        if env.state is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Environment not initialized. Call /reset first.",
+            )
+        return {
+            "message": "Use POST /step with a JSON body containing action_type and content.",
+            "state": env.state_dict(),
+        }
+
     if req is None:
         raise HTTPException(
             status_code=400,
