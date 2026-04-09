@@ -1,4 +1,5 @@
 import json
+import sys
 
 import requests
 from requests import RequestException
@@ -10,6 +11,8 @@ from openai_client import get_openai_client
 TASKS = ["easy", "medium", "hard"]
 LOCAL_ENV = JobReadinessEnv()
 USE_LOCAL_ENV = False
+MIN_TASK_SCORE = 0.001
+MAX_TASK_SCORE = 0.999
 
 
 def log_start(task):
@@ -18,21 +21,42 @@ def log_start(task):
 
 def log_step(step, action, reward, done, error):
     print(
-        f"[STEP] step={step} action={action} reward={reward:.4f} done={str(done).lower()} error={error or 'null'}",
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error or 'null'}",
         flush=True,
     )
 
 
-def log_end(success, steps, rewards):
-    rewards_str = ",".join(f"{r:.4f}" for r in rewards)
+def log_end(success, steps, score, rewards):
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
         flush=True,
     )
 
 
 def log_mode(mode):
-    print(f"[MODE] backend={mode}", flush=True)
+    print(f"[DEBUG] backend={mode}", file=sys.stderr, flush=True)
+
+
+def normalize_task_score_for_output(score):
+    try:
+        score = float(score)
+    except Exception:
+        return MIN_TASK_SCORE
+
+    if score != score:
+        return MIN_TASK_SCORE
+    if score <= 0.0:
+        return MIN_TASK_SCORE
+    if score >= 1.0:
+        return MAX_TASK_SCORE
+
+    rounded = round(score, 3)
+    if rounded <= 0.0:
+        return MIN_TASK_SCORE
+    if rounded >= 1.0:
+        return MAX_TASK_SCORE
+    return rounded
 
 
 def local_post(path, payload):
@@ -59,7 +83,8 @@ def post(path, payload):
     except (RequestException, ValueError) as exc:
         USE_LOCAL_ENV = True
         print(
-            f"[WARN] API server unavailable at {ENV_SERVER_URL}. Falling back to local environment. error={exc}",
+            f"[DEBUG] API server unavailable at {ENV_SERVER_URL}. Falling back to local environment. error={exc}",
+            file=sys.stderr,
             flush=True,
         )
         log_mode("local")
@@ -134,7 +159,8 @@ def build_actions(state):
         log_mode("proxy")
     except Exception as exc:
         print(
-            f"[WARN] LLM planning failed. Falling back to deterministic planner. error={exc}",
+            f"[DEBUG] LLM planning failed. Falling back to deterministic planner. error={exc}",
+            file=sys.stderr,
             flush=True,
         )
         plan_data = default_plan(state)
@@ -152,6 +178,7 @@ def build_actions(state):
 def run_task(task_name):
     log_start(task_name)
     rewards = []
+    final_score = MIN_TASK_SCORE
 
     state = post("/reset", {"task_name": task_name})
     steps = build_actions(state)
@@ -170,10 +197,14 @@ def run_task(task_name):
         log_step(step_num, action["action_type"], reward, done, error)
 
         if done:
-            success = reward >= 0.7
+            final_score = normalize_task_score_for_output(reward)
+            success = final_score >= 0.7
             break
 
-    log_end(success, step_num, rewards)
+    if rewards and step_num > 0 and not success:
+        final_score = normalize_task_score_for_output(rewards[-1])
+
+    log_end(success, step_num, final_score, rewards)
 
 
 if __name__ == "__main__":
