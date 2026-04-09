@@ -8,6 +8,10 @@ def normalize_task_score(score):
     except Exception:
         return MIN_SCORE
 
+    # Guard against NaN, which can slip past normal comparisons and fail validators.
+    if score != score:
+        return MIN_SCORE
+
     if score <= 0.0:
         return MIN_SCORE
     if score >= 1.0:
@@ -31,4 +35,5 @@ def self_check_normalize_task_score():
         7: normalize_task_score(7),
         0.00001: normalize_task_score(0.00001),
         0.99996: normalize_task_score(0.99996),
+        float("nan"): normalize_task_score(float("nan")),
     }

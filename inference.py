@@ -18,13 +18,13 @@ def log_start(task):
 
 def log_step(step, action, reward, done, error):
     print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error or 'null'}",
+        f"[STEP] step={step} action={action} reward={reward:.4f} done={str(done).lower()} error={error or 'null'}",
         flush=True,
     )
 
 
 def log_end(success, steps, rewards):
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    rewards_str = ",".join(f"{r:.4f}" for r in rewards)
     print(
         f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
         flush=True,
